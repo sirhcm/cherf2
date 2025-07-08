@@ -10,17 +10,10 @@
 #include "helpers.h"
 
 extern int client_main(int argc, char **argv);
-#ifndef DISABLE_SERVER
 extern int server_main(int argc, char **argv);
-#endif
 
-static void usage(const char *name) {
-#ifdef DISABLE_SERVER
-  errx(EX_USAGE, "usage: %s <client|keygen>", name);
-#else
-  errx(EX_USAGE, "usage: %s <client|server|keygen>", name);
-#endif
-}
+__attribute__((noreturn))
+static void usage(const char *name) { errx(EX_USAGE, "usage: %s <client|server|keygen>", name); }
 
 static void keygen(const char *filename) {
   uint8_t sk[32], pk[32];
@@ -43,9 +36,7 @@ static void keygen(const char *filename) {
 int main(int argc, char **argv) {
   if (argc < 2) usage(argv[0]);
   if (strcmp(argv[1], "client") == 0) return client_main(argc - 1, argv + 1);
-#ifndef DISABLE_SERVER
   if (strcmp(argv[1], "server") == 0) return server_main(argc - 1, argv + 1);
-#endif
   if (strcmp(argv[1], "keygen") == 0) {
     if (argc != 3) errx(EX_USAGE, "usage: %s keygen <filename>", argv[0]);
     keygen(argv[2]);

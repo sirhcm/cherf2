@@ -1,0 +1,14 @@
+.cache/
+cscope.out
+compile_commands.json
+
+config.mk
+*.o
+cherf
+
+alice
+alice.pub
+bob
+bob.pub
+rendez
+rendez.pub
