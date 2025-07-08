@@ -4,7 +4,6 @@
 #include <err.h>
 #include <errno.h>
 #include <limits.h>
-#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,24 +40,11 @@ struct advert {
   UT_hash_handle hh;
 };
 
-static braid_t b;
 static int count = 0;
 static uint8_t s_sk[32]; // my static secret key
 static uint8_t s_pk[32]; // my static public key
 
 static struct advert *map = NULL;
-
-typedef unsigned long long ull;
-
-/*
-static void hexdump(const uint8_t *buf, size_t len) {
-  for (uint8_t *p = (uint8_t *)buf; p < buf + len; p++) {
-    if ((p - buf) % 16 == 0) printf("\n%04lx: ", (unsigned long)(p - buf));
-    printf("%02x ", *p);
-  }
-  printf("\n");
-}
-*/
 
 static void handle(braid_t b, int fd) {
   uint8_t p[PACKET_MAX], es[32], ss[32], nonce[24] = {0};
@@ -66,7 +52,7 @@ static void handle(braid_t b, int fd) {
 
   getpeername(fd, (struct sockaddr *)&sa, &(socklen_t){sizeof(sa)});
 
-  if (braid_recv_packet(b, fd, p)) {
+  if (recv_packet(b, fd, p)) {
     warn("read from client");
     goto done;
   }
@@ -110,6 +96,11 @@ static void handle(braid_t b, int fd) {
     nonce[23]++;
 
     // TODO: check client public key
+
+    printf("attach request from: ");
+    for (int i = 0; i < 32; i++) printf("%02x", data->hs.s[i]);
+    puts("");
+
     HASH_FIND(hh, map, data->t, 32, a);
     if (a == NULL) {
       warnx("target not found");
@@ -200,7 +191,6 @@ done:
 }
 
 static void usage(const char *name) { errx(EX_USAGE, "usage: %s <port>", name); }
-static void info(int sig) { (void)sig; braidinfo(b); }
 
 static void run_server(braid_t b, int s) {
   for (;;) {
@@ -222,8 +212,7 @@ static void run_server(braid_t b, int s) {
 int server_main(int argc, char **argv) {
   char p[PATH_MAX];
   int s;
-
-  sigaction(SIGQUIT, &(struct sigaction){ .sa_handler = info, .sa_flags = SA_RESTART }, NULL);
+  braid_t b;
 
   if (argc != 2) usage(argv[0]);
 
