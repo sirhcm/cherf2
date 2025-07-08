@@ -6,9 +6,9 @@ include config.mk
 
 SRCS := $(wildcard *.c)
 OBJS := $(SRCS:.c=.o)
-CFLAGS := -Wall -Werror -Wno-incompatible-pointer-types -std=c99 -g -fsanitize=address \
+CFLAGS := -Wall -Werror -Wno-incompatible-pointer-types -std=c99 -g -D_POSIX_C_SOURCE=199309L \
           $(MONOCYPHER_CFLAGS) $(BRAID_CFLAGS)
-LDFLAGS := $(MONOCYPHER_LDFLAGS) $(BRAID_LDFLAGS) -fsanitize=address
+LDFLAGS := $(MONOCYPHER_LDFLAGS) $(BRAID_LDFLAGS)
 
 .PHONY: all clean
 all: cherf2
