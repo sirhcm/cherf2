@@ -1,9 +1,10 @@
 #include "helpers.h"
 
+#include <arpa/inet.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <netdb.h>
+#include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
