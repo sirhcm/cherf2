@@ -113,7 +113,11 @@ static void attach(braid_t b, const attachargs *args) {
 
   if ((fd = punch(b, sa.sin_port, DATA(p, ConnectData))) < 0) err(EX_TEMPFAIL, "punch failed");
   printf("connected to %s:%d\n", inet_ntoa(*(struct in_addr *)&DATA(p, ConnectData)->addr), ntohs(DATA(p, ConnectData)->port));
-  write(fd, &args->port, 2);
+  if (write(fd, &args->port, 2) != 2) {
+    warn("write port failed");
+    close(fd);
+    return;
+  }
 
   c1 = braidadd(b, splice, 65536, "splice", CORD_NORMAL, 0);
   c2 = braidadd(b, splice, 65536, "splice", CORD_NORMAL, 0);
