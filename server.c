@@ -216,7 +216,7 @@ int server_main(int argc, char **argv) {
 
   if (argc != 2) usage(argv[0]);
 
-  snprintf(p, sizeof(p), "%s/.cherf/rendez", getenv("HOME"));
+  snprintf(p, sizeof(p), "%s/.cherf2/rendez", getenv("HOME"));
   read_key(32, s_sk, p);
   crypto_x25519_public_key(s_pk, s_sk);
 

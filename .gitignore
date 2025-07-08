@@ -4,7 +4,7 @@ compile_commands.json
 
 config.mk
 *.o
-cherf
+cherf2
 
 alice
 alice.pub

@@ -1,0 +1,22 @@
+cherf2 - "Perforates" NAT tables for p2p communication.
+
+WHAT
+
+  cherf2 is the second generation of https://github.com/ais-ucla/cherf.
+
+  The idea is the same, but cherf2 is written in C99 and provides a simpler
+  protocol.
+
+DEPENDENCIES
+
+  cherf2 requires significantly fewer dependencies than cherf. The two required
+  libraries are:
+
+   - monocypher (https://monocypher.org/) for cryptography
+   - libbraid (https://github.com/christopherm99/libbraid) for cooperative
+     userspace multitasking.
+
+INSTALLATION
+
+  After retrieving the source code, run ./configure and then make to build.
+  Configuration options are available via ./configure --help.

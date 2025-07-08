@@ -218,11 +218,11 @@ int client_main(int argc, char **argv) {
   if (argc < 2) usage(argv[0]);
 
   // load keys
-  snprintf(p, sizeof(p), "%s/.cherf/static", getenv("HOME"));
+  snprintf(p, sizeof(p), "%s/.cherf2/static", getenv("HOME"));
   read_key(sizeof(s_sk), s_sk, p);
-  snprintf(p, sizeof(p), "%s/.cherf/static.pub", getenv("HOME"));
+  snprintf(p, sizeof(p), "%s/.cherf2/static.pub", getenv("HOME"));
   read_key(sizeof(s_pk), s_pk, p);
-  snprintf(p, sizeof(p), "%s/.cherf/rendez.pub", getenv("HOME"));
+  snprintf(p, sizeof(p), "%s/.cherf2/rendez.pub", getenv("HOME"));
   read_key(sizeof(r_pk), r_pk, p);
 
   if (strcmp(argv[1], "attach") == 0) {

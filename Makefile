@@ -11,14 +11,14 @@ CFLAGS := -Wall -Werror -Wno-incompatible-pointer-types -std=c99 -g -fsanitize=a
 LDFLAGS := $(MONOCYPHER_LDFLAGS) $(BRAID_LDFLAGS) -fsanitize=address
 
 .PHONY: all clean
-all: cherf
+all: cherf2
 
-cherf: $(OBJS)
+cherf2: $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^
 
 $(OBJS): %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS) cherf
+	rm -f $(OBJS) cherf2
 
