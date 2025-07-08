@@ -18,6 +18,12 @@
 #include "helpers.h"
 #include "packet.h"
 
+#ifdef __clang__
+#define MUSTTAIL __attribute__((musttail))
+#else
+#define MUSTTAIL
+#endif
+
 static char *r_host;
 static char *r_port;
 static uint8_t s_sk[32]; // my static secret key
@@ -209,7 +215,7 @@ static void advertise(braid_t b) {
   *cordarg(c1) = (usize)sargs1;
   *cordarg(c2) = (usize)sargs2;
 
-  __attribute__((musttail)) return advertise(b);
+  MUSTTAIL return advertise(b);
 }
 
 int client_main(int argc, char **argv) {
