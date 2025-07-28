@@ -119,8 +119,8 @@ static void attach(braid_t b, const attachargs *args) {
     return;
   }
 
-  c1 = braidadd(b, splice, 65536, "splice", CORD_NORMAL, 0);
-  c2 = braidadd(b, splice, 65536, "splice", CORD_NORMAL, 0);
+  c1 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 0);
+  c2 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 0);
 
   sargs1 = malloc(sizeof(spliceargs));
   sargs2 = malloc(sizeof(spliceargs));
@@ -202,8 +202,8 @@ static void advertise(braid_t b) {
   }
 
   // TODO: should this be a separate process?
-  c1 = braidadd(b, splice, 65536, "splice", CORD_NORMAL, 0);
-  c2 = braidadd(b, splice, 65536, "splice", CORD_NORMAL, 0);
+  c1 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 0);
+  c2 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 0);
 
   sargs1 = malloc(sizeof(spliceargs));
   sargs2 = malloc(sizeof(spliceargs));
