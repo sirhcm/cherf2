@@ -63,6 +63,7 @@ static void splice(braid_t b, spliceargs *p) {
   close(p->from);
   close(p->to);
   cordhalt(b, p->c);
+  braidyield(b);
   free(p->p);
   free(p);
 }
