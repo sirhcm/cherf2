@@ -87,3 +87,12 @@ int punch(braid_t b, int port, ConnectData *cd) {
   return -1;
 }
 
+#define n2h(x) (((x) < 10) ? (x) + '0' : (x) - 10 + 'A')
+char *key2hex(char dst[static 64], uint8_t key[static 32]) {
+  for (unsigned int i = 0; i < 32; i++) {
+    dst[2 * i] = n2h(key[i] >> 4);
+    dst[2 * i + 1] = n2h(key[i] & 0xF);
+  }
+  return dst;
+}
+

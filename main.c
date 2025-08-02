@@ -16,12 +16,15 @@ __attribute__((noreturn))
 static void usage(const char *name) { errx(EX_USAGE, "usage: %s <client|server|keygen>", name); }
 
 static void keygen(const char *filename) {
+  char keystr[65] = {0};
   uint8_t sk[32], pk[32];
   char p[PATH_MAX];
   FILE *f;
 
   rand_buf(32, sk);
   crypto_x25519_public_key(pk, sk);
+  printf("public key: %s\n", key2hex(keystr, pk));
+  printf("secret key: %s\n", key2hex(keystr, sk));
 
   if ((f = fopen(filename, "wb")) == NULL) err(EX_NOINPUT, "fopen %s", filename);
   if (fwrite(sk, 1, 32, f) != 32) err(EX_NOINPUT, "fwrite %s", filename);

@@ -15,6 +15,7 @@ void rand_buf(size_t len, uint8_t buf[static len]);
 void read_key(size_t len, uint8_t key[static len], const char *filename);
 int recv_packet(braid_t b, int fd, uint8_t p[static PACKET_MAX]);
 int punch(braid_t b, int port, ConnectData *cd);
+char *key2hex(char dst[static 64], uint8_t key[static 32]);
 
 #endif
 
