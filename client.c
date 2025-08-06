@@ -11,6 +11,7 @@
 
 #include <monocypher.h>
 #include <braid.h>
+#include <braid/io.h>
 #include <braid/fd.h>
 #include <braid/tcp.h>
 #include <braid/ck.h>
@@ -246,8 +247,7 @@ int client_main(int argc, char **argv) {
     read_key(sizeof(a.t_pk), a.t_pk, argv[4]);
     a.port = (uint16_t)atoi(argv[5]);
 
-    braidadd(b, fdvisor, 65536, "fdvisor", CORD_SYSTEM, 0);
-    braidadd(b, ckvisor, 65536, "ckvisor", CORD_SYSTEM, 0);
+    braidadd(b, iovisor, 65536, "iovisor", CORD_SYSTEM, 0);
     braidadd(b, attach, 65536, "attach", CORD_NORMAL, (usize)&a);
     braidstart(b);
 
@@ -260,8 +260,7 @@ int client_main(int argc, char **argv) {
     r_host = argv[2];
     r_port = argv[3];
 
-    braidadd(b, fdvisor, 65536, "fdvisor", CORD_SYSTEM, 0);
-    braidadd(b, ckvisor, 65536, "ckvisor", CORD_SYSTEM, 0);
+    braidadd(b, iovisor, 65536, "iovisor", CORD_SYSTEM, 0);
 
     for (int i = 0; i < 1; i++) braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
     braidstart(b);

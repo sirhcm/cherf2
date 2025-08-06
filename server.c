@@ -15,6 +15,7 @@
 
 #include <monocypher.h>
 #include <braid.h>
+#include <braid/io.h>
 #include <braid/fd.h>
 #include <braid/tcp.h>
 #include <braid/ch.h>
@@ -142,7 +143,7 @@ static void handle(braid_t b, int fd) {
     printf("advertising from: ");
     for (int i = 0; i < 32; i++) printf("%02x", data->hs.s[i]);
     puts("");
-    c = chcreate(b);
+    c = chcreate();
 
     HASH_FIND(hh, map, data->hs.s, 32, a);
     if (a == NULL) {
@@ -225,8 +226,7 @@ int server_main(int argc, char **argv) {
   printf("server listening on port %d, running as pid=%d\n", atoi(argv[1]), getpid());
 
   b = braidinit();
-  braidadd(b, fdvisor, 65536, "fdvisor", CORD_SYSTEM, 0);
-  braidadd(b, chvisor, 65536, "chvisor", CORD_SYSTEM, 0);
+  braidadd(b, iovisor, 65536, "iovisor", CORD_SYSTEM, 0);
   braidadd(b, run_server, 65536, "run_server", CORD_NORMAL, s);
   braidstart(b);
   return -1;
