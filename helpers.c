@@ -7,11 +7,13 @@
 #include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sysexits.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <monocypher.h>
 #include <braid.h>
 #include <braid/fd.h>
 #include <braid/tcp.h>
@@ -57,6 +59,27 @@ int recv_packet(braid_t b, int fd, uint8_t p[static PACKET_MAX]) {
   return 0;
 }
 
+void gen_keys(const uint8_t s_sk[static 32], const uint8_t s_pk[static 32], const uint8_t r_pk[32],
+                     uint8_t e_pk[static 32], uint8_t es[static 32], uint8_t ss[static 32]) {
+  uint8_t e_sk[32], buf[96];
+  // generate ephemeral key
+  rand_buf(32, e_sk);
+  crypto_x25519_public_key(e_pk, e_sk);
+
+  // derive (es) shared secret
+  crypto_x25519(buf, e_sk, r_pk);
+  memcpy(buf + 32, e_pk, 32);
+  memcpy(buf + 64, r_pk, 32);
+  crypto_blake2b(es, 32, buf, 96);
+  crypto_wipe(buf, 96);
+  // derive (ss) shared secret
+  crypto_x25519(buf, s_sk, r_pk);
+  memcpy(buf + 32, es, 32);
+  crypto_blake2b(ss, 32, buf, 64);
+  crypto_wipe(buf, 64);
+  crypto_wipe(e_sk, 32);
+}
+
 int punch(braid_t b, int port, ConnectData *cd) {
   printf("connecting ");
   fflush(stdout);
@@ -96,3 +119,15 @@ char *key2hex(char dst[static 64], uint8_t key[static 32]) {
   return dst;
 }
 
+void splice(braid_t b, spliceargs *p) {
+  uint8_t buf[65536];
+  ssize_t n;
+  while ((n = fdread(b, p->from, buf, sizeof(buf))) > 0)
+    if (fdwrite(b, p->to, buf, n) <= 0) break;
+  close(p->from);
+  close(p->to);
+  cordhalt(b, p->c);
+  braidyield(b);
+  free(p->p);
+  free(p);
+}

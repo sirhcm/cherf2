@@ -24,7 +24,7 @@
 #define HASH_KEYCMP(a, b, n) ((n) == 32 ? crypto_verify32((uint8_t *)(a), (uint8_t *)(b)) : -1)
 #include "uthash.h"
 
-#define MAX_CONN 5
+#define MAX_CONN 32
 #define TIMEOUT_SEC 2
 #define TS_EPS 1000
 #define MAX_ADVERTS 8
@@ -117,6 +117,7 @@ static void handle(braid_t b, int fd) {
         syslog(LOG_ERR, "[%-15s] chsend failed while handling ATTACH: %m", ip);
         goto done;
       }
+      chdestroy(a->ads[a->n - 1].ch);
     }
   } else {
     struct timespec ts;
@@ -175,7 +176,6 @@ static void handle(braid_t b, int fd) {
     HEAD(p)->type = CONNECT;
     // TODO: tcp keepalive
     memcpy(DATA(p, ConnectData), (ConnectData *)chrecv(b, c), sizeof(ConnectData));
-    chdestroy(c);
 
     if (--a->n == 0) {
       HASH_DEL(map, a);
