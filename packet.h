@@ -9,6 +9,7 @@
 #define data_sz(p) (HEAD(p)->type == ATTACH ? sizeof(AttachData) : \
   HEAD(p)->type == ADVERTISE ? sizeof(AdvertiseData) : \
   HEAD(p)->type == CONNECT ? sizeof(ConnectData) : \
+  HEAD(p)->type == KEEPALIVE ? 1 : \
   HEAD(p)->type == ERROR ? sizeof(ErrorData) : 0)
 #define packet_sz(p) (sizeof(Header) + data_sz(p))
 
@@ -16,6 +17,7 @@ enum {
   ATTACH,
   ADVERTISE,
   CONNECT,
+  KEEPALIVE,
   ERROR = 0xFF
 };
 

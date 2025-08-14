@@ -1,20 +1,22 @@
 #include <arpa/inet.h>
-#include <err.h>
 #include <limits.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sysexits.h>
+#include <sys/syslog.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
 #include <monocypher.h>
 #include <braid.h>
 #include <braid/io.h>
+#include <braid/ck.h>
 #include <braid/fd.h>
 #include <braid/tcp.h>
 
+#include "config.h"
 #include "helpers.h"
 #include "packet.h"
 
@@ -24,29 +26,59 @@
 #define MUSTTAIL
 #endif
 
-static char *r_host;
-static char *r_port;
-static uint8_t s_sk[32]; // my static secret key
-static uint8_t s_pk[32]; // my static public key
-static uint8_t r_pk[32]; // rendez static public key
+static struct { int n; } flags = { 5 };
+static braid_t b;
+static char *r_host, *r_port;
+static uint8_t s_sk[32], s_pk[32], r_pk[32];
 
 __attribute__((noreturn)) static void usage(const char *name) {
-  errx(EX_USAGE, "usage: %s <rendez host> <rendez port>", name);
+  fprintf(stderr,
+      "usage: %s [options] <rendez host> <rendez port>\n\n"
+      "options:\n"
+      "  -h     show this help message\n"
+      "  -n N   spawn N simultaneous advertisers (default: %d)\n" ,
+      name, flags.n);
+  exit(1);
 }
 
-static void advertise(braid_t b) {
+static void advertise(void);
+
+static void keepalive(int fd, cord_t c) {
+  uint8_t p = KEEPALIVE;
+  for (;;) {
+    cksleep(b, KEEPALIVE_INTERVAL);
+    if (cktimeout(b, (usize (*)())fdwrite, 1024, KEEPALIVE_TIMEOUT, 4, b, fd, &p, 1) != 1 || p != KEEPALIVE) {
+      cordhalt(b, c);
+      braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
+      return;
+    }
+  }
+}
+
+static int retries = 0;
+static void advertise(void) {
   uint8_t e_pk[32], es[32], ss[32], nonce[24] = {0}, p[PACKET_MAX];
   int fd, t;
   uint16_t port;
   struct timespec ts;
   struct sockaddr_in sa;
-  cord_t c1, c2;
-  spliceargs *sargs1, *sargs2;
+  cord_t keepc, c1, c2;
 
   gen_keys(s_sk, s_pk, r_pk, e_pk, es, ss);
-  if ((fd = tcpdial(b, -1, r_host, atoi(r_port))) < 0) err(EX_OSERR, "dial to %s:%s", r_host, r_port);
-  if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &(struct linger){ .l_onoff = 1, .l_linger = 0 }, sizeof(struct linger)))
-    err(EX_OSERR, "setsockopt SO_LINGER");
+  if ((fd = tcpdial(b, -1, r_host, atoi(r_port))) < 0) {
+    syslog(LOG_ERR, "tcpdial failed: %m (retries: %d/%d)", retries, ADVERTISE_RETRIES);
+    if (++retries > ADVERTISE_RETRIES) braidexit(b);
+    else {
+      cksleep(b, ADVERTISE_RETRY_DELAY);
+      MUSTTAIL return advertise();
+    }
+  }
+  retries = 0;
+
+  if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &(struct linger){ .l_onoff = 1, .l_linger = 0 }, sizeof(struct linger))) {
+    syslog(LOG_ERR, "setsockopt: %m");
+    exit(-1);
+  }
 
   // create message
   HEAD(p)->type = ADVERTISE;
@@ -58,71 +90,100 @@ static void advertise(braid_t b) {
   crypto_aead_lock(DATA(p, HandshakeData)->s, HEAD(p)->mac, es, nonce, &HEAD(p)->type, 1, DATA(p, HandshakeData)->s, 32);
   crypto_wipe(es, 32);
   nonce[23]++;
-  crypto_aead_lock(&DATA(p, AdvertiseData)->ts_ms, DATA(p, AdvertiseData)->mac2, ss, nonce, NULL, 0,
-                   &DATA(p, AdvertiseData)->ts_ms, sizeof(DATA(p, AdvertiseData)->ts_ms));
+  crypto_aead_lock((uint8_t *)&DATA(p, AdvertiseData)->ts_ms, DATA(p, AdvertiseData)->mac2, ss, nonce, NULL, 0,
+                   (uint8_t *)&DATA(p, AdvertiseData)->ts_ms, sizeof(DATA(p, AdvertiseData)->ts_ms));
   nonce[23]++;
 
-  // send ADVERTISE
-  if (fdwrite(b, fd, &p, packet_sz(p)) != packet_sz(p)) err(EX_IOERR, "write to %s:%s", r_host, r_port);
-  printf("advertising with rendezvous %s:%s\n", r_host, r_port);
+  // send ADVERT
+  if (fdwrite(b, fd, &p, packet_sz(p)) != packet_sz(p)) {
+    close(fd);
+    syslog(LOG_WARNING, "send ADVERT failed: %m");
+    goto done;
+  }
+
+  syslog(LOG_INFO, "ADVERT installed at rendez");
+
+  keepc = braidadd(b, keepalive, 65536, "keepalive", CORD_NORMAL, 2, fd, braidcurr(b));
 
   // receive CONNECT or ERROR
   recv_packet(b, fd, p);
+
+  cordhalt(b, keepc);
+
   if (HEAD(p)->type == ERROR) {
-    if (crypto_aead_unlock(DATA(p, uint8_t), HEAD(p)->mac, ss, nonce, &HEAD(p)->type, 1, DATA(p, uint8_t), sizeof(ErrorData)) < 0)
-      errx(EX_PROTOCOL, "corrupted packet");
-    if (DATA(p, ErrorData)->code == ERROR_UNAUTHORIZED) errx(EX_NOPERM, "unauthorized");
-    if (DATA(p, ErrorData)->code == ERROR_INVALID_TIMESTAMP) errx(EX_TEMPFAIL, "invalid timestamp");
-    if (DATA(p, ErrorData)->code == ERROR_TOO_MANY_ADVERTS) errx(EX_TEMPFAIL, "too many adverts");
-    errx(EX_PROTOCOL, "unknown error code %d", DATA(p, ErrorData)->code);
-  } else if (HEAD(p)->type != CONNECT) errx(EX_PROTOCOL, "expected CONNECT or ERROR packet");
-  if (crypto_aead_unlock(DATA(p, uint8_t), HEAD(p)->mac, ss, nonce, &HEAD(p)->type, 1, DATA(p, uint8_t), sizeof(ConnectData)) < 0)
-    errx(EX_PROTOCOL, "corrupted packet");
+    if (crypto_aead_unlock(DATA(p, uint8_t), HEAD(p)->mac, ss, nonce, &HEAD(p)->type, 1, DATA(p, uint8_t), sizeof(ErrorData)) < 0) {
+      syslog(LOG_WARNING, "corrupted packet from rendez");
+      close(fd);
+      goto done;
+    }
+    if (DATA(p, ErrorData)->code == ERROR_UNAUTHORIZED) syslog(LOG_WARNING, "ERROR: UNAUTHORIZED");
+    else if (DATA(p, ErrorData)->code == ERROR_INVALID_TIMESTAMP) syslog(LOG_WARNING, "ERROR: INVALID TIMESTAMP");
+    else if (DATA(p, ErrorData)->code == ERROR_TOO_MANY_ADVERTS) syslog(LOG_WARNING, "ERROR: TOO MANY ADVERTS");
+    else syslog(LOG_WARNING, "ERROR: unknown error code %d", DATA(p, ErrorData)->code);
+    close(fd);
+    goto done;
+  } else if (HEAD(p)->type != CONNECT) {
+    syslog(LOG_WARNING, "expected CONNECT or ERROR packet");
+    close(fd);
+    goto done;
+  }
+  if (crypto_aead_unlock(DATA(p, uint8_t), HEAD(p)->mac, ss, nonce, &HEAD(p)->type, 1, DATA(p, uint8_t), sizeof(ConnectData)) < 0) {
+    syslog(LOG_WARNING, "corrupted packet from rendez");
+    close(fd);
+    goto done;
+  }
   crypto_wipe(ss, 32);
 
-  if (getsockname(fd, &sa, &(socklen_t){sizeof(sa)})) err(EX_OSERR, "getsockname");
+  if (getsockname(fd, (struct sockaddr *)&sa, &(socklen_t){sizeof(sa)})) {
+    syslog(LOG_ERR, "getsockname: %m");
+    exit(-1);
+  }
   close(fd);
 
-  if ((fd = punch(b, sa.sin_port, DATA(p, ConnectData))) < 0) err(EX_TEMPFAIL, "punch failed");
+  if ((fd = punch(b, sa.sin_port, DATA(p, ConnectData))) < 0) {
+    syslog(LOG_WARNING, "punch failed");
+    goto done;
+  }
   if (fdread(b, fd, &port, 2) != 2) {
-    warn("read port failed");
+    syslog(LOG_WARNING, "read port from client failed");
     close(fd);
-    return;
+    goto done;
   }
 
-  printf("connecting to port %d\n", port);
+  syslog(LOG_INFO, "client successfully holepunched, connecting to port %d\n", port);
+
   if ((t = tcpdial(b, -1, "localhost", port)) < 0) {
-    warnx("dial to localhost:%d failed", port);
+    syslog(LOG_WARNING, "tcpdial to localhost:%d for client failed", port);
     close(fd);
-    return;
+    goto done;
+  }
+
+  if (fdwrite(b, fd, &(char){1}, 1) != 1) {
+    syslog(LOG_WARNING, "send ack to client failed");
+    close(fd);
+    close(t);
+    goto done;
   }
 
   // TODO: should this be a separate process?
-  c1 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 0);
-  c2 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 0);
+  c1 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, fd, t, &c2);
+  c2 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, t, fd, &c1);
 
-  sargs1 = malloc(sizeof(spliceargs));
-  sargs2 = malloc(sizeof(spliceargs));
-  sargs1->from = fd;
-  sargs1->to = t;
-  sargs1->c = c2;
-  sargs1->p = sargs2;
-  sargs2->from = t;
-  sargs2->to = fd;
-  sargs2->c = c1;
-  sargs2->p = sargs1;
-
-  *cordarg(c1) = (usize)sargs1;
-  *cordarg(c2) = (usize)sargs2;
-
-  MUSTTAIL return advertise(b);
+done:;
+  MUSTTAIL return advertise();
 }
 
 int advertise_main(int argc, char **argv) {
+  int opt;
   char p[PATH_MAX];
-  braid_t b = braidinit();
 
-  if (argc != 3) usage(argv[0]);
+  while ((opt = getopt(argc, argv, "hn:")) != -1)
+    switch (opt) {
+      case 'n': flags.n = atoi(optarg); break;
+      default: usage(argv[0]);
+    }
+
+  if ((argc - optind) != 2) usage(argv[0]);
 
   // load keys
   snprintf(p, sizeof(p), "%s/.cherf2/static", getenv("HOME"));
@@ -132,12 +193,14 @@ int advertise_main(int argc, char **argv) {
   snprintf(p, sizeof(p), "%s/.cherf2/rendez.pub", getenv("HOME"));
   read_key(sizeof(r_pk), r_pk, p);
 
-  r_host = argv[1];
-  r_port = argv[2];
+  r_host = argv[optind];
+  r_port = argv[optind + 1];
+
+  b = braidinit();
 
   braidadd(b, iovisor, 65536, "iovisor", CORD_SYSTEM, 0);
 
-  for (int i = 0; i < 1; i++) braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
+  for (int i = 0; i < flags.n; i++) braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
   braidstart(b);
 
   return -1;

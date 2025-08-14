@@ -1,5 +1,3 @@
-#include <sys/signal.h>
-
 #include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
@@ -19,35 +17,50 @@
 #include <braid/fd.h>
 #include <braid/tcp.h>
 #include <braid/ch.h>
+#include <braid/ck.h>
 
+#include "config.h"
 #include "helpers.h"
 #define HASH_KEYCMP(a, b, n) ((n) == 32 ? crypto_verify32((uint8_t *)(a), (uint8_t *)(b)) : -1)
 #include "uthash.h"
 
 #define MAX_CONN 32
-#define TIMEOUT_SEC 2
-#define TS_EPS 1000
 #define MAX_ADVERTS 8
 
-#define EX_FATAL -1
-
-struct advert {
+struct target {
   uint8_t pk[32];
-  struct {
+  struct ad {
     ConnectData cd;
     ch_t ch;
-  } ads[MAX_ADVERTS];
+    struct ad *next;
+  } *head;
   size_t n;
   UT_hash_handle hh;
 };
 
+static braid_t b;
 static int count = 0;
-static uint8_t s_sk[32]; // my static secret key
-static uint8_t s_pk[32]; // my static public key
+static uint8_t s_sk[32], s_pk[32];
+static struct target *map = NULL;
 
-static struct advert *map = NULL;
+static void keepalive(int fd, ch_t c) {
+  uint8_t p;
+  for (;;) {
+    cksleep(b, KEEPALIVE_INTERVAL);
+    if (cktimeout(b, (usize (*)())fdread, 1024, KEEPALIVE_TIMEOUT, 4, b, fd, &p, 1) != 1 || p != KEEPALIVE) {
+      chsend(b, c, 0);
+      return;
+    }
+  }
+}
 
-static void handle(braid_t b, int fd) {
+static struct ad *pop_ad(struct target *t) {
+  struct ad *a = t->head;
+  t->head = a->next;
+  return a;
+}
+
+static void handle(int fd) {
   char ip[INET_ADDRSTRLEN], keystr[65] = {0};
   uint8_t p[PACKET_MAX], es[32], ss[32], nonce[24] = {0};
   struct sockaddr_in sa;
@@ -91,7 +104,7 @@ static void handle(braid_t b, int fd) {
   }
 
   if (HEAD(p)->type == ATTACH) {
-    struct advert *a;
+    struct target *t;
     AttachData *data = DATA(p, AttachData);
 
     if (crypto_aead_unlock(data->t, data->mac2, ss, nonce, NULL, 0, data->t, 32)) {
@@ -104,26 +117,29 @@ static void handle(braid_t b, int fd) {
 
     syslog(LOG_INFO, "[%-15s] ATTACH: %s", ip, key2hex(keystr, data->hs.s));
 
-    HASH_FIND(hh, map, data->t, 32, a);
-    if (a == NULL) {
+    HASH_FIND(hh, map, data->t, 32, t);
+    if (t == NULL) {
       syslog(LOG_NOTICE, "[%-15s] target not found: %s", ip, key2hex(keystr, data->t));
       HEAD(p)->type = ERROR;
       DATA(p, ErrorData)->code = ERROR_NOT_FOUND;
     } else {
+      struct ad *a = pop_ad(t);
       HEAD(p)->type = CONNECT;
-      memcpy(DATA(p, ConnectData), &a->ads[a->n - 1].cd, sizeof(ConnectData));
+      memcpy(DATA(p, ConnectData), &a->cd, sizeof(ConnectData));
 
-      if (chsend(b, a->ads[a->n - 1].ch, (usize)&(ConnectData){ sa.sin_addr.s_addr, sa.sin_port })) {
+      if (chsend(b, a->ch, (usize)&(ConnectData){ sa.sin_addr.s_addr, sa.sin_port })) {
         syslog(LOG_ERR, "[%-15s] chsend failed while handling ATTACH: %m", ip);
         goto done;
       }
-      chdestroy(a->ads[a->n - 1].ch);
     }
   } else {
     struct timespec ts;
-    struct advert *a;
+    struct target *t;
+    struct ad *a;
     ch_t c;
+    cord_t keepc;
     AdvertiseData *data = DATA(p, AdvertiseData);
+    ConnectData *cd;
 
     clock_gettime(CLOCK_REALTIME, &ts);
     if (crypto_aead_unlock((uint8_t *)&data->ts_ms, data->mac2, ss, nonce, NULL, 0, (uint8_t *)&data->ts_ms, sizeof(data->ts_ms))) {
@@ -144,43 +160,50 @@ static void handle(braid_t b, int fd) {
     syslog(LOG_INFO, "[%-15s] ADVERT: %s", ip, key2hex(keystr, data->hs.s));
     c = chcreate();
 
-    HASH_FIND(hh, map, data->hs.s, 32, a);
-    if (a == NULL) {
-      if ((a = malloc(sizeof(struct advert))) == NULL) {
-        syslog(LOG_ERR, "[%-15s] malloc failed while handling ADVERT: %m", ip);
+    HASH_FIND(hh, map, data->hs.s, 32, t);
+    if (t == NULL) {
+      if ((t = calloc(1, sizeof(struct target))) == NULL) {
+        syslog(LOG_ERR, "[%-15s] calloc failed while handling ADVERT: %m", ip);
         goto done;
       }
 
-      memset(a, 0, sizeof(struct advert));
-      memcpy(a->pk, data->hs.s, 32);
+      memcpy(t->pk, data->hs.s, 32);
 
-      a->ads[0].cd.addr = sa.sin_addr.s_addr;
-      a->ads[0].cd.port = sa.sin_port;
-      a->ads[0].ch = c;
-      a->n = 1;
-      HASH_ADD(hh, map, pk, 32, a);
-    } else {
-      if (a->n >= MAX_ADVERTS) {
-        syslog(LOG_WARNING, "[%-15s] too many adverts", ip);
-        HEAD(p)->type = ERROR;
-        DATA(p, ErrorData)->code = ERROR_TOO_MANY_ADVERTS;
-        goto send;
-      } else {
-        a->ads[a->n].cd.addr = sa.sin_addr.s_addr;
-        a->ads[a->n].cd.port = sa.sin_port;
-        a->ads[a->n].ch = c;
-        a->n++;
-      }
+      HASH_ADD(hh, map, pk, 32, t);
+    } else if (t->n >= MAX_ADVERTS) {
+      syslog(LOG_WARNING, "[%-15s] too many adverts", ip);
+      HEAD(p)->type = ERROR;
+      DATA(p, ErrorData)->code = ERROR_TOO_MANY_ADVERTS;
+      goto send;
     }
+
+    if ((a = malloc(sizeof(struct ad))) == NULL) {
+      syslog(LOG_ERR, "[%-15s] calloc failed while handling ADVERT: %m", ip);
+      goto done;
+    }
+
+    a->cd.addr = sa.sin_addr.s_addr;
+    a->cd.port = sa.sin_port;
+    a->ch = c;
+    a->next = t->head;
+    t->head = a;
+    t->n++;
+
+    keepc = braidadd(b, keepalive, 65536, "keepalive", CORD_NORMAL, 2, fd, c);
+    cd = (ConnectData *)chrecv(b, c);
+
+    if (--t->n == 0) {
+      HASH_DEL(map, t);
+      free(t);
+    }
+
+    if (!cd) {
+      syslog(LOG_NOTICE, "[%-15s] connection timed out", ip);
+      goto done;
+    } else cordhalt(b, keepc);
 
     HEAD(p)->type = CONNECT;
-    // TODO: tcp keepalive
-    memcpy(DATA(p, ConnectData), (ConnectData *)chrecv(b, c), sizeof(ConnectData));
-
-    if (--a->n == 0) {
-      HASH_DEL(map, a);
-      free(a);
-    }
+    memcpy(DATA(p, ConnectData), cd, sizeof(ConnectData));
   }
 send:
   crypto_aead_lock(DATA(p, uint8_t), HEAD(p)->mac, ss, nonce, &HEAD(p)->type, 1, DATA(p, uint8_t), data_sz(p));
@@ -197,7 +220,7 @@ static int usage(const char *name) {
   return 1;
 }
 
-static void run_server(braid_t b, int s) {
+static void run_server(int s) {
   for (;;) {
     int c;
 
@@ -210,14 +233,13 @@ static void run_server(braid_t b, int s) {
     }
 
     count++;
-    braidadd(b, handle, 65536, "handle", CORD_NORMAL, c);
+    braidadd(b, handle, 65536, "handle", CORD_NORMAL, 1, c);
   }
 }
 
 int server_main(int argc, char **argv) {
   char p[PATH_MAX];
   int s;
-  braid_t b;
 
   if (argc != 2) return usage(argv[0]);
 
@@ -230,11 +252,9 @@ int server_main(int argc, char **argv) {
     return 1;
   }
 
-  signal(SIGPIPE, SIG_IGN);
-
   b = braidinit();
   braidadd(b, iovisor, 65536, "iovisor", CORD_SYSTEM, 0);
-  braidadd(b, run_server, 65536, "run_server", CORD_NORMAL, s);
+  braidadd(b, run_server, 65536, "run_server", CORD_NORMAL, 1, s);
   braidstart(b);
   return -1;
 }

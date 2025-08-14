@@ -1,5 +1,6 @@
 #include <err.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +40,7 @@ static void keygen(const char *filename) {
 
 int main(int argc, char **argv) {
   if (argc < 2) usage(argv[0]);
+  signal(SIGPIPE, SIG_IGN);
   if (strcmp(argv[1], "advertise") == 0) return advertise_main(argc - 1, argv + 1);
   if (strcmp(argv[1], "attach") == 0) return attach_main(argc - 1, argv + 1);
   if (strcmp(argv[1], "server") == 0) return server_main(argc - 1, argv + 1);

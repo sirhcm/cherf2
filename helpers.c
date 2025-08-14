@@ -119,15 +119,14 @@ char *key2hex(char dst[static 64], uint8_t key[static 32]) {
   return dst;
 }
 
-void splice(braid_t b, spliceargs *p) {
+void splice(braid_t b, int from, int to, cord_t *c) {
   uint8_t buf[65536];
   ssize_t n;
-  while ((n = fdread(b, p->from, buf, sizeof(buf))) > 0)
-    if (fdwrite(b, p->to, buf, n) <= 0) break;
-  close(p->from);
-  close(p->to);
-  cordhalt(b, p->c);
+  while ((n = fdread(b, from, buf, sizeof(buf))) > 0)
+    if (fdwrite(b, to, buf, n) <= 0) break;
+  close(from);
+  close(to);
+  cordhalt(b, *c);
   braidyield(b);
-  free(p->p);
-  free(p);
 }
+

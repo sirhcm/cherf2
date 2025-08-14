@@ -6,9 +6,7 @@ include config.mk
 
 SRCS := $(wildcard *.c)
 OBJS := $(SRCS:.c=.o)
-CFLAGS := -Wall -Werror -Wno-incompatible-pointer-types \
-          -std=c99 -g -D_POSIX_C_SOURCE=200112L \
-          -O2 \
+CFLAGS := -Wall -Werror -std=c99 -g -O2 \
           $(MONOCYPHER_CFLAGS) $(BRAID_CFLAGS)
 LDFLAGS := $(MONOCYPHER_LDFLAGS) $(BRAID_LDFLAGS)
 

@@ -20,8 +20,7 @@ void gen_keys(const uint8_t s_sk[static 32], const uint8_t s_pk[static 32], cons
 int recv_packet(braid_t b, int fd, uint8_t p[static PACKET_MAX]);
 int punch(braid_t b, int port, ConnectData *cd);
 
-typedef struct { int from, to; cord_t c; void *p; } spliceargs;
-void splice(braid_t b, spliceargs *p);
+void splice(braid_t b, int from, int to, cord_t *c);
 
 #endif
 
