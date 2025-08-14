@@ -19,4 +19,5 @@ DEPENDENCIES
 INSTALLATION
 
   After retrieving the source code, run ./configure and then make to build.
-  Configuration options are available via ./configure --help.
+  Configuration options are available via ./configure --help. Additional
+  compile-time options can be set in config.h.

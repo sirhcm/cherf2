@@ -18,6 +18,7 @@
 #include <braid/fd.h>
 #include <braid/tcp.h>
 #include <braid/ck.h>
+#include <braid/ch.h>
 
 #include "packet.h"
 
@@ -119,14 +120,15 @@ char *key2hex(char dst[static 64], uint8_t key[static 32]) {
   return dst;
 }
 
-void splice(braid_t b, int from, int to, cord_t *c) {
+void splice(braid_t b, int from, int to, ch_t ch) {
   uint8_t buf[65536];
   ssize_t n;
+  cord_t c = (cord_t)chrecv(b, ch);
+  chdestroy(ch);
   while ((n = fdread(b, from, buf, sizeof(buf))) > 0)
     if (fdwrite(b, to, buf, n) <= 0) break;
   close(from);
   close(to);
-  cordhalt(b, *c);
-  braidyield(b);
+  cordhalt(b, c);
 }
 

@@ -13,6 +13,7 @@
 #include <braid.h>
 #include <braid/io.h>
 #include <braid/ck.h>
+#include <braid/ch.h>
 #include <braid/fd.h>
 #include <braid/tcp.h>
 
@@ -62,7 +63,7 @@ static void advertise(void) {
   uint16_t port;
   struct timespec ts;
   struct sockaddr_in sa;
-  cord_t keepc, c1, c2;
+  cord_t keepc;
 
   gen_keys(s_sk, s_pk, r_pk, e_pk, es, ss);
   if ((fd = tcpdial(b, -1, r_host, atoi(r_port))) < 0) {
@@ -165,9 +166,15 @@ static void advertise(void) {
     goto done;
   }
 
-  // TODO: should this be a separate process?
-  c1 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, fd, t, &c2);
-  c2 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, t, fd, &c1);
+  {
+    cord_t c1, c2;
+    ch_t ch1 = chcreate(), ch2 = chcreate();
+    // TODO: should this be a separate process?
+    c1 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, fd, t, ch1);
+    c2 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, t, fd, ch2);
+    chsend(b, ch1, (usize)c2);
+    chsend(b, ch2, (usize)c1);
+  }
 
 done:;
   MUSTTAIL return advertise();

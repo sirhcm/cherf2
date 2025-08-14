@@ -20,11 +20,8 @@
 #include "packet.h"
 
 static braid_t b;
-static char *r_host;
-static char *r_port;
-static uint8_t s_sk[32]; // my static secret key
-static uint8_t s_pk[32]; // my static public key
-static uint8_t r_pk[32]; // rendez static public key
+static char *r_host, *r_port;
+static uint8_t s_sk[32], s_pk[32], r_pk[32];
 
 __attribute__((noreturn)) static void usage(const char *name) {
   errx(EX_USAGE, "usage: %s <rendez host> <rendez port> <remote name> <remote port>", name);
@@ -34,7 +31,6 @@ static void attach(const uint8_t t_pk[static 32], uint16_t port) {
   uint8_t e_pk[32], es[32], ss[32], nonce[24] = {0}, p[PACKET_MAX];
   int fd;
   struct sockaddr_in sa;
-  cord_t *c1, *c2;
   char dummy;
 
   gen_keys(s_sk, s_pk, r_pk, e_pk, es, ss);
@@ -86,9 +82,14 @@ static void attach(const uint8_t t_pk[static 32], uint16_t port) {
     return;
   }
 
-  if (!(c1 = braidmalloc(b, sizeof(cord_t))) || !(c2 = braidmalloc(b, sizeof(cord_t)))) err(EX_OSERR, "malloc");
-  *c1 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, fd, STDOUT_FILENO, c2);
-  *c2 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, STDIN_FILENO, fd, c1);
+  {
+    cord_t c1, c2;
+    ch_t ch1 = chcreate(), ch2 = chcreate();
+    c1 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, fd, STDOUT_FILENO, ch1);
+    c2 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, STDIN_FILENO, fd, ch2);
+    chsend(b, ch1, (usize)c2);
+    chsend(b, ch2, (usize)c1);
+  }
 }
 
 int attach_main(int argc, char **argv) {

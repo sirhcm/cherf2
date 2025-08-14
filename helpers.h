@@ -6,6 +6,7 @@
 #include <sys/types.h>
 
 #include <braid.h>
+#include <braid/ch.h>
 
 #include "packet.h"
 
@@ -20,7 +21,7 @@ void gen_keys(const uint8_t s_sk[static 32], const uint8_t s_pk[static 32], cons
 int recv_packet(braid_t b, int fd, uint8_t p[static PACKET_MAX]);
 int punch(braid_t b, int port, ConnectData *cd);
 
-void splice(braid_t b, int from, int to, cord_t *c);
+void splice(braid_t b, int from, int to, ch_t ch);
 
 #endif
 

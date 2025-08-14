@@ -24,9 +24,6 @@
 #define HASH_KEYCMP(a, b, n) ((n) == 32 ? crypto_verify32((uint8_t *)(a), (uint8_t *)(b)) : -1)
 #include "uthash.h"
 
-#define MAX_CONN 32
-#define MAX_ADVERTS 8
-
 struct target {
   uint8_t pk[32];
   struct ad {
@@ -191,13 +188,15 @@ static void handle(int fd) {
 
     keepc = braidadd(b, keepalive, 65536, "keepalive", CORD_NORMAL, 2, fd, c);
     cd = (ConnectData *)chrecv(b, c);
+    braidyield(b); // FIXME
+    chdestroy(c);
 
     if (--t->n == 0) {
       HASH_DEL(map, t);
       free(t);
     }
 
-    if (!cd) {
+    if (!cd || (usize)cd == -1) {
       syslog(LOG_NOTICE, "[%-15s] connection timed out", ip);
       goto done;
     } else cordhalt(b, keepc);
@@ -226,7 +225,7 @@ static void run_server(int s) {
 
     if ((c = tcpaccept(b, s)) < 0) syslog(LOG_NOTICE, "accept failed: %m");
 
-    if (count >= MAX_CONN) {
+    if (count >= MAX_CONNECTIONS) {
       syslog(LOG_WARNING, "too many connections, dropping");
       close(c);
       continue;
