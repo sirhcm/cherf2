@@ -163,8 +163,10 @@ static void advertise(void) {
     chsend(b, ch1, (usize)c2);
     chsend(b, ch2, (usize)c1);
   }
+  braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
 
 done:
+  cksleep(b, ADVERTISE_RETRY_DELAY);
   braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
 }
 
@@ -176,8 +178,8 @@ int advertise_main(int argc, char **argv) {
       case 'n':
         if (!(flags.n = atoi(optarg))) goto usage;
         break;
-      case 'i': flags.i = optarg;
-      case 'r': flags.r = optarg;
+      case 'i': flags.i = optarg; break;
+      case 'r': flags.r = optarg; break;
       default: goto usage;
     }
 

@@ -98,8 +98,8 @@ int attach_main(int argc, char **argv) {
 
   while ((opt = getopt(argc, argv, "i:r:")) != -1)
     switch (opt) {
-      case 'i': flags.i = optarg;
-      case 'r': flags.r = optarg;
+      case 'i': flags.i = optarg; break;
+      case 'r': flags.r = optarg; break;
       default: goto usage;
     }
 

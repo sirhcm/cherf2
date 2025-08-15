@@ -191,8 +191,7 @@ static void handle(int fd) {
 
     keepc = braidadd(b, keepalive, 65536, "keepalive", CORD_NORMAL, 2, fd, c);
     cd = (ConnectData *)chrecv(b, c);
-    braidyield(b); // FIXME
-    chdestroy(c);
+    // FIXME: destroy channel
 
     if (--t->n == 0) {
       HASH_DEL(map, t);
