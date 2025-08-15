@@ -10,7 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sysexits.h>
+#include <syslog.h>
 #include <sys/socket.h>
+#include <sys/syslimits.h>
 #include <unistd.h>
 
 #include <monocypher.h>
@@ -20,6 +22,7 @@
 #include <braid/ck.h>
 #include <braid/ch.h>
 
+#include "config.h"
 #include "packet.h"
 
 static int rand_fd = -1;
@@ -37,12 +40,27 @@ void rand_buf(size_t len, uint8_t buf[static len]) {
   }
 }
 
-void read_key(size_t len, uint8_t key[static len], const char *filename) {
+int read_key(uint8_t key[static 32], const char *fn) {
   FILE *f;
+  char _path[] = KEYFILE_PATH, *path = _path, *dir;
 
-  if ((f = fopen(filename, "rb")) == NULL) err(EX_NOINPUT, "fopen %s", filename);
-  if (fread(key, 1, len, f) != len) err(EX_NOINPUT, "fread %s", filename);
-  fclose(f);
+  while ((dir = strsep(&path, ":"))) {
+    char p[PATH_MAX];
+    if (dir[0] == '~' && (dir[1] == '/' || dir[1] == 0)) {
+      char *home;
+      if (!(home = getenv("HOME"))) continue;
+      snprintf(p, sizeof(p), "%s%s/%s", home, dir + 1, fn);
+    } else snprintf(p, sizeof(p), "%s/%s", dir, fn);
+    if ((f = fopen(p, "rb"))) goto success;
+    if (errno != ENOENT) return -1;
+  }
+
+  errno = ENOENT;
+  return -1;
+
+success:
+  if (fread(key, 1, 32, f) != 32) return -1;
+  return fclose(f);
 }
 
 int recv_packet(braid_t b, int fd, uint8_t p[static PACKET_MAX]) {
@@ -81,16 +99,20 @@ void gen_keys(const uint8_t s_sk[static 32], const uint8_t s_pk[static 32], cons
   crypto_wipe(e_sk, 32);
 }
 
-int punch(braid_t b, int port, ConnectData *cd) {
-  printf("connecting ");
-  fflush(stdout);
+int punch(braid_t b, char daemon, int port, ConnectData *cd) {
+  if (!daemon) {
+    printf("connecting ");
+    fflush(stdout);
+  }
   for (int i = 0; i < 10; i++) {
     int fd;
     char addr[INET_ADDRSTRLEN];
     struct sockaddr_in sa = { .sin_family = AF_INET, .sin_port = port, .sin_addr.s_addr = htonl(INADDR_ANY) };
 
-    printf(".");
-    fflush(stdout);
+    if (!daemon) {
+      printf(".");
+      fflush(stdout);
+    }
     if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) err(EX_OSERR, "socket");
     if (bind(fd, (struct sockaddr *)&sa, sizeof(sa))) err(EX_OSERR, "bind to port %d", port);
     if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &(struct linger){ .l_onoff = 1, .l_linger = 0 }, sizeof(struct linger)))
@@ -99,15 +121,17 @@ int punch(braid_t b, int port, ConnectData *cd) {
     snprintf(addr, sizeof(addr), "%d.%d.%d.%d", cd->addr & 0xFF, (cd->addr >> 8) & 0xFF, (cd->addr >> 16) & 0xFF, (cd->addr >> 24) & 0xFF);
 
     if (tcpdial(b, fd, addr, htons(cd->port)) >= 0) {
-      printf(" done\n");
+      if (!daemon) printf(" done\n");
       return fd;
     }
-    printf("\bx");
-    fflush(stdout);
+    if (!daemon) {
+      printf("\bx");
+      fflush(stdout);
+    }
     close(fd);
     if (i < 9) ckusleep(b, 1000000);
   }
-  putchar('\n');
+  if (!daemon) putchar('\n');
   return -1;
 }
 
@@ -120,13 +144,15 @@ char *key2hex(char dst[static 64], uint8_t key[static 32]) {
   return dst;
 }
 
-void splice(braid_t b, int from, int to, ch_t ch) {
+void splice(braid_t b, char daemon, int from, int to, ch_t ch) {
   uint8_t buf[65536];
   ssize_t n;
   cord_t c = (cord_t)chrecv(b, ch);
   chdestroy(ch);
-  while ((n = fdread(b, from, buf, sizeof(buf))) > 0)
-    if (fdwrite(b, to, buf, n) <= 0) break;
+  while ((n = fdread(b, from, buf, sizeof(buf))) > 0 && errno != EAGAIN)
+    if (fdwrite(b, to, buf, n) <= 0 && errno != EAGAIN) break;
+  if (daemon) syslog(LOG_NOTICE, "splice done: %m");
+  else warn("splice done");
   close(from);
   close(to);
   cordhalt(b, c);

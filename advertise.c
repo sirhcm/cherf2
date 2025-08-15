@@ -1,10 +1,12 @@
 #include <arpa/inet.h>
+#include <err.h>
 #include <limits.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/syslog.h>
+#include <sysexits.h>
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
@@ -27,20 +29,10 @@
 #define MUSTTAIL
 #endif
 
-static struct { int n; } flags = { 5 };
+static struct { int n; char *i, *r; } flags = { 5, "static", "rendez.pub" };
 static braid_t b;
 static char *r_host, *r_port;
 static uint8_t s_sk[32], s_pk[32], r_pk[32];
-
-__attribute__((noreturn)) static void usage(const char *name) {
-  fprintf(stderr,
-      "usage: %s [options] <rendez host> <rendez port>\n\n"
-      "options:\n"
-      "  -h     show this help message\n"
-      "  -n N   spawn N simultaneous advertisers (default: %d)\n" ,
-      name, flags.n);
-  exit(1);
-}
 
 static void advertise(void);
 
@@ -141,7 +133,7 @@ static void advertise(void) {
   }
   close(fd);
 
-  if ((fd = punch(b, sa.sin_port, DATA(p, ConnectData))) < 0) {
+  if ((fd = punch(b, 1, sa.sin_port, DATA(p, ConnectData))) < 0) {
     syslog(LOG_WARNING, "punch failed");
     goto done;
   }
@@ -170,8 +162,8 @@ static void advertise(void) {
     cord_t c1, c2;
     ch_t ch1 = chcreate(), ch2 = chcreate();
     // TODO: should this be a separate process?
-    c1 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, fd, t, ch1);
-    c2 = braidadd(b, splice, 131072, "splice", CORD_NORMAL, 4, b, t, fd, ch2);
+    c1 = braidadd(b, (void (*)())splice, 131072, "splice", CORD_NORMAL, 5, b, 1, fd, t, ch1);
+    c2 = braidadd(b, (void (*)())splice, 131072, "splice", CORD_NORMAL, 5, b, 1, t, fd, ch2);
     chsend(b, ch1, (usize)c2);
     chsend(b, ch2, (usize)c1);
   }
@@ -182,26 +174,27 @@ done:;
 
 int advertise_main(int argc, char **argv) {
   int opt;
-  char p[PATH_MAX];
 
-  while ((opt = getopt(argc, argv, "hn:")) != -1)
+  while ((opt = getopt(argc, argv, "n:i:r:")) != -1)
     switch (opt) {
-      case 'n': flags.n = atoi(optarg); break;
-      default: usage(argv[0]);
+      case 'n':
+        if (!(flags.n = atoi(optarg))) goto usage;
+        break;
+      case 'i': flags.i = optarg;
+      case 'r': flags.r = optarg;
+      default: goto usage;
     }
 
-  if ((argc - optind) != 2) usage(argv[0]);
+  if ((argc - optind) != 1) goto usage;
 
   // load keys
-  snprintf(p, sizeof(p), "%s/.cherf2/static", getenv("HOME"));
-  read_key(sizeof(s_sk), s_sk, p);
-  snprintf(p, sizeof(p), "%s/.cherf2/static.pub", getenv("HOME"));
-  read_key(sizeof(s_pk), s_pk, p);
-  snprintf(p, sizeof(p), "%s/.cherf2/rendez.pub", getenv("HOME"));
-  read_key(sizeof(r_pk), r_pk, p);
+  if (read_key(s_sk, flags.i)) err(EX_NOINPUT, "failed to open static private key '%s'", flags.i);
+  crypto_x25519_public_key(s_pk, s_sk);
+  if (read_key(r_pk, flags.r)) err(EX_NOINPUT, "failed to open rendez public key '%s'", flags.r);
 
+  if (!(r_port = strchr(argv[optind], ':'))) goto usage;
+  *r_port++ = 0;
   r_host = argv[optind];
-  r_port = argv[optind + 1];
 
   b = braidinit();
 
@@ -209,7 +202,16 @@ int advertise_main(int argc, char **argv) {
 
   for (int i = 0; i < flags.n; i++) braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
   braidstart(b);
-
   return -1;
+
+usage:
+  errx(EX_USAGE,
+      "usage: advertise [options] <rendez host>:<rendez port>\n\n"
+      "options:\n"
+      "  -h        show this help message\n"
+      "  -n N      spawn N simultaneous advertisers (default: %d)\n"
+      "  -i file   name of static private key file (default: %s)\n"
+      "  -r file   name of rendez public key file (default: %s)\n",
+      flags.n, flags.i, flags.r);
 }
 

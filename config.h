@@ -1,3 +1,7 @@
+// === GENERAL OPTIONS ===
+// colon separated list specifying where to search for keys
+#define KEYFILE_PATH ".:~/.cherf2"
+
 // === RENDEZ SERVER OPTIONS ===
 // maximum number of open connections for rendez server
 #define MAX_CONNECTIONS 32

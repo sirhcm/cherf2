@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <err.h>
 #include <errno.h>
 #include <limits.h>
 #include <netinet/in.h>
@@ -6,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sysexits.h>
 #include <syslog.h>
 #include <sys/socket.h>
 #include <time.h>
@@ -35,6 +37,7 @@ struct target {
   UT_hash_handle hh;
 };
 
+static struct { uint16_t p; char *i; } flags = { 1235, "rendez" };
 static braid_t b;
 static int count = 0;
 static uint8_t s_sk[32], s_pk[32];
@@ -214,11 +217,6 @@ done:
   count--;
 }
 
-static int usage(const char *name) {
-  fprintf(stderr, "usage: %s <port>", name);
-  return 1;
-}
-
 static void run_server(int s) {
   for (;;) {
     int c;
@@ -237,24 +235,37 @@ static void run_server(int s) {
 }
 
 int server_main(int argc, char **argv) {
-  char p[PATH_MAX];
-  int s;
+  int opt, s;
 
-  if (argc != 2) return usage(argv[0]);
+  while ((opt = getopt(argc, argv, "p:i:")) != -1)
+    switch (opt) {
+      case 'p':
+        if (!(flags.p = atoi(optarg))) goto usage;
+        break;
+      case 'i': flags.i = optarg; break;
+      default: goto usage;
+    }
 
-  snprintf(p, sizeof(p), "%s/.cherf2/rendez", getenv("HOME"));
-  read_key(32, s_sk, p);
+  if ((argc - optind) != 0) goto usage;
+
+  if (read_key(s_sk, flags.i)) err(EX_NOINPUT, "failed to open static private key '%s'", flags.i);
   crypto_x25519_public_key(s_pk, s_sk);
 
-  if ((s = tcplisten(NULL, atoi(argv[1]))) < 0) {
-    fprintf(stderr, "tcplisten on port %s: %s", argv[1], strerror(errno));
-    return 1;
-  }
+  if ((s = tcplisten(NULL, flags.p)) < 0) err(EX_OSERR, "tcplisten on port %d", flags.p);
 
   b = braidinit();
   braidadd(b, iovisor, 65536, "iovisor", CORD_SYSTEM, 0);
   braidadd(b, run_server, 65536, "run_server", CORD_NORMAL, 1, s);
   braidstart(b);
   return -1;
+
+usage:
+  errx(EX_USAGE,
+      "usage: server [options]\n"
+      "options:\n"
+      "  -h        show this help message\n"
+      "  -p port   port to serve on (default: %d)\n"
+      "  -i file   name of static private key file (default: %s)\n",
+      flags.p, flags.i);
 }
 
