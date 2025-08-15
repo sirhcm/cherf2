@@ -218,6 +218,9 @@ done:
 }
 
 static void run_server(int s) {
+  char keystr[65] = {0};
+  syslog(LOG_INFO, "server starting on port %d with public key %s", flags.p, key2hex(keystr, s_pk));
+
   for (;;) {
     int c;
 
