@@ -48,7 +48,7 @@ static void keepalive(int fd, ch_t c) {
   for (;;) {
     cksleep(b, KEEPALIVE_INTERVAL);
     if (cktimeout(b, (usize (*)())fdread, 1024, KEEPALIVE_TIMEOUT, 4, b, fd, &p, 1) != 1 || p != KEEPALIVE) {
-      chsend(b, c, 0);
+      chclose(b, c);
       return;
     }
   }
@@ -130,13 +130,14 @@ static void handle(int fd) {
       if (chsend(b, a->ch, (usize)&(ConnectData){ sa.sin_addr.s_addr, sa.sin_port })) {
         syslog(LOG_ERR, "[%-15s] chsend failed while handling ATTACH: %m", ip);
         goto done;
-      }
+      } else chclose(b, a->ch);
     }
   } else {
     struct timespec ts;
     struct target *t;
     struct ad *a;
     ch_t c;
+    char ok;
     cord_t keepc;
     AdvertiseData *data = DATA(p, AdvertiseData);
     ConnectData *cd;
@@ -158,7 +159,7 @@ static void handle(int fd) {
     // TODO: check advertiser public key
 
     syslog(LOG_INFO, "[%-15s] ADVERT: %s", ip, key2hex(keystr, data->hs.s));
-    c = chcreate();
+    c = chopen();
 
     HASH_FIND(hh, map, data->hs.s, 32, t);
     if (t == NULL) {
@@ -190,15 +191,14 @@ static void handle(int fd) {
     t->n++;
 
     keepc = braidadd(b, keepalive, 65536, "keepalive", CORD_NORMAL, 2, fd, c);
-    cd = (ConnectData *)chrecv(b, c);
-    // FIXME: destroy channel
+    cd = (ConnectData *)chrecv(b, c, &ok);
 
     if (--t->n == 0) {
       HASH_DEL(map, t);
       free(t);
     }
 
-    if (!cd || (usize)cd == -1) {
+    if (!ok) {
       syslog(LOG_NOTICE, "[%-15s] connection timed out", ip);
       goto done;
     } else cordhalt(b, keepc);
