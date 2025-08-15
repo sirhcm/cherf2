@@ -150,7 +150,7 @@ void splice(braid_t b, char daemon, int from, int to, ch_t ch) {
   uint8_t buf[65536];
   ssize_t n;
   cord_t c = (cord_t)chrecv(b, ch);
-  chdestroy(ch);
+  // FIXME: chdestroy(ch);
   while ((n = fdread(b, from, buf, sizeof(buf))) > 0 && errno != EAGAIN)
     if (fdwrite(b, to, buf, n) <= 0 && errno != EAGAIN) break;
   if (daemon) syslog(LOG_NOTICE, "splice done: %m");
