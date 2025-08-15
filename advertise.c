@@ -164,7 +164,7 @@ static void advertise(void) {
     chsend(b, ch2, (usize)c1);
   }
   braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
-
+  return;
 done:
   cksleep(b, ADVERTISE_RETRY_DELAY);
   braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);

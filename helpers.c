@@ -102,13 +102,16 @@ void gen_keys(const uint8_t s_sk[static 32], const uint8_t s_pk[static 32], cons
 }
 
 int punch(braid_t b, char daemon, int port, ConnectData *cd) {
+  char addr[INET_ADDRSTRLEN];
+  snprintf(addr, sizeof(addr), "%d.%d.%d.%d", cd->addr & 0xFF, (cd->addr >> 8) & 0xFF, (cd->addr >> 16) & 0xFF, (cd->addr >> 24) & 0xFF);
+
   if (!daemon) {
-    printf("connecting ");
+    printf("connecting to %s ", addr);
     fflush(stdout);
-  }
+  } else syslog(LOG_INFO, "connecting to %s", addr);
+
   for (int i = 0; i < 10; i++) {
     int fd;
-    char addr[INET_ADDRSTRLEN];
     struct sockaddr_in sa = { .sin_family = AF_INET, .sin_port = port, .sin_addr.s_addr = htonl(INADDR_ANY) };
 
     if (!daemon) {
@@ -119,8 +122,6 @@ int punch(braid_t b, char daemon, int port, ConnectData *cd) {
     if (bind(fd, (struct sockaddr *)&sa, sizeof(sa))) err(EX_OSERR, "bind to port %d", port);
     if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &(struct linger){ .l_onoff = 1, .l_linger = 0 }, sizeof(struct linger)))
       err(EX_OSERR, "setsockopt SO_LINGER");
-
-    snprintf(addr, sizeof(addr), "%d.%d.%d.%d", cd->addr & 0xFF, (cd->addr >> 8) & 0xFF, (cd->addr >> 16) & 0xFF, (cd->addr >> 24) & 0xFF);
 
     if (tcpdial(b, fd, addr, htons(cd->port)) >= 0) {
       if (!daemon) printf(" done\n");
