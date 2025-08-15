@@ -67,7 +67,7 @@ int main(void) {
 EOF
 
 if $cc -o /tmp/lingertest /tmp/lingertest.c 2>/dev/null; then
-  rm -f /tmp/lingertest.c
+  rm -f /tmp/lingertest.c /tmp/lingertest
   printf "yes\n"
 else
   printf "no\n"
