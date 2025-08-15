@@ -106,8 +106,8 @@ int punch(braid_t b, char daemon, int port, ConnectData *cd) {
   snprintf(addr, sizeof(addr), "%d.%d.%d.%d", cd->addr & 0xFF, (cd->addr >> 8) & 0xFF, (cd->addr >> 16) & 0xFF, (cd->addr >> 24) & 0xFF);
 
   if (!daemon) {
-    printf("connecting to %s ", addr);
-    fflush(stdout);
+    fprintf(stderr, "connecting to %s ", addr);
+    fflush(stderr);
   } else syslog(LOG_INFO, "connecting to %s", addr);
 
   for (int i = 0; i < 10; i++) {
@@ -115,8 +115,8 @@ int punch(braid_t b, char daemon, int port, ConnectData *cd) {
     struct sockaddr_in sa = { .sin_family = AF_INET, .sin_port = port, .sin_addr.s_addr = htonl(INADDR_ANY) };
 
     if (!daemon) {
-      printf(".");
-      fflush(stdout);
+      fprintf(stderr, ".");
+      fflush(stderr);
     }
     if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) err(EX_OSERR, "socket");
     if (bind(fd, (struct sockaddr *)&sa, sizeof(sa))) err(EX_OSERR, "bind to port %d", port);
@@ -124,12 +124,12 @@ int punch(braid_t b, char daemon, int port, ConnectData *cd) {
       err(EX_OSERR, "setsockopt SO_LINGER");
 
     if (tcpdial(b, fd, addr, htons(cd->port)) >= 0) {
-      if (!daemon) printf(" done\n");
+      if (!daemon) fprintf(stderr, " done\n");
       return fd;
     }
     if (!daemon) {
-      printf("\bx");
-      fflush(stdout);
+      fprintf(stderr, "\bx");
+      fflush(stderr);
     }
     close(fd);
     if (i < 9) ckusleep(b, 1000000);
@@ -152,7 +152,7 @@ void splice(braid_t b, char daemon, int from, int to, ch_t ch) {
   ssize_t n;
   cord_t c = (cord_t)chrecv(b, ch, 0);
   chclose(b, ch);
-  while ((n = fdread(b, from, buf, sizeof(buf))) > 0 && errno != EAGAIN)
+  while ((n = fdread(b, from, buf, sizeof(buf))) > 0 || errno == EAGAIN)
     if (fdwrite(b, to, buf, n) <= 0 && errno != EAGAIN) break;
   if (daemon) syslog(LOG_NOTICE, "splice done: %m");
   else warn("splice done");

@@ -69,7 +69,7 @@ static void attach(const uint8_t t_pk[static 32], uint16_t port) {
   close(fd);
 
   if ((fd = punch(b, 0, sa.sin_port, DATA(p, ConnectData))) < 0) err(EX_TEMPFAIL, "punch failed");
-  printf("connected to %s:%d\n", inet_ntoa(*(struct in_addr *)&DATA(p, ConnectData)->addr), ntohs(DATA(p, ConnectData)->port));
+  fprintf(stderr, "connected to %s:%d\n", inet_ntoa(*(struct in_addr *)&DATA(p, ConnectData)->addr), ntohs(DATA(p, ConnectData)->port));
   if (fdwrite(b, fd, &port, 2) != 2) {
     warn("write port failed");
     close(fd);
