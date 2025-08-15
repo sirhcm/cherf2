@@ -80,8 +80,8 @@ cat > config.mk <<EOF
 PREFIX := $prefix
 CC := $cc
 MONOCYPHER_CFLAGS := $(pkg-config --cflags monocypher)
-MONOCYPHER_LDFLAGS := $(pkg-config --libs monocypher)
+MONOCYPHER_LDFLAGS := $(pkg-config --libs monocypher) -Wl,-rpath,$monocypher/lib
 BRAID_CFLAGS := $(pkg-config --cflags libbraid)
-BRAID_LDFLAGS := $(pkg-config --libs libbraid)
+BRAID_LDFLAGS := $(pkg-config --libs libbraid) -Wl,-rpath,$braid/lib
 EOF
 
