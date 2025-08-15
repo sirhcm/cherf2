@@ -1,9 +1,11 @@
+#define _GNU_SOURCE
+#define _POSIX_C_SOURCE 200809L
 #include "helpers.h"
 
 #include <arpa/inet.h>
 #include <err.h>
 #include <errno.h>
-#include <fcntl.h>
+#include <limits.h>
 #include <netinet/in.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -12,7 +14,6 @@
 #include <sysexits.h>
 #include <syslog.h>
 #include <sys/socket.h>
-#include <sys/syslimits.h>
 #include <unistd.h>
 
 #include <monocypher.h>
@@ -25,16 +26,15 @@
 #include "config.h"
 #include "packet.h"
 
-static int rand_fd = -1;
+static FILE *urandom = 0;
 void rand_buf(size_t len, uint8_t buf[static len]) {
   size_t tot = 0;
 
-  if (rand_fd == -1)
-    if ((rand_fd = open("/dev/urandom", O_RDONLY)) < 0)
-      err(EX_OSERR, "open /dev/urandom");
+  if (!urandom && !(urandom = fopen("/dev/urandom", "rb")))
+    err(EX_OSERR, "fopen /dev/urandom");
 
   while (tot < len) {
-    ssize_t rc = read(rand_fd, buf + tot, len - tot);
+    ssize_t rc = fread(buf + tot, 1, len - tot, urandom);
     if (rc <= 0) err(EX_OSERR, "read /dev/urandom");
     tot += (size_t)rc;
   }

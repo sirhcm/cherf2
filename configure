@@ -10,7 +10,7 @@ usage() {
 usage: $0 [OPTIONS]
 
 options:
-  -cc=CC              C compiler (default: $cc)
+  --cc=CC              C compiler (default: $cc)
   --prefix=PREFIX     installation prefix (default: $prefix)
   --monocypher=PATH   path to monocypher (default: $monocypher)
   --braid=PATH        path to braid (default: $braid)
@@ -34,8 +34,9 @@ done
 
 printf "Checking for libbraid... "
 
-if [ -f "$braid/lib/libbraid.a" ]; then
+if [ -f "$braid/lib/pkgconfig/libbraid.pc" ]; then
   printf "found\n"
+  export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$braid/lib/pkgconfig"
 else
   printf "not found\n"
   exit 1
@@ -43,8 +44,9 @@ fi
 
 printf "Checking for monocypher... "
 
-if [ -f "$monocypher/lib/libmonocypher.a" ]; then
+if [ -f "$monocypher/lib/pkgconfig/monocypher.pc" ]; then
   printf "found\n"
+  export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:$monocypher/lib/pkgconfig"
 else
   printf "not found\n"
   exit 1
@@ -77,9 +79,9 @@ fi
 cat > config.mk <<EOF
 PREFIX := $prefix
 CC := $cc
-MONOCYPHER_CFLAGS := -I$monocypher/include
-MONOCYPHER_LDFLAGS := -L$monocypher/lib -lmonocypher
-BRAID_CFLAGS := -I$braid/include
-BRAID_LDFLAGS := -L$braid/lib -lbraid
+MONOCYPHER_CFLAGS := $(pkg-config --cflags monocypher)
+MONOCYPHER_LDFLAGS := $(pkg-config --libs monocypher)
+BRAID_CFLAGS := $(pkg-config --cflags libbraid)
+BRAID_LDFLAGS := $(pkg-config --libs libbraid)
 EOF
 

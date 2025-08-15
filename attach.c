@@ -1,6 +1,6 @@
+#define _XOPEN_SOURCE 700
 #include <arpa/inet.h>
 #include <err.h>
-#include <errno.h>
 #include <limits.h>
 #include <netinet/in.h>
 #include <stdio.h>

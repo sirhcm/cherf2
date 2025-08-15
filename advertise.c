@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 199309L
 #include <arpa/inet.h>
 #include <err.h>
 #include <limits.h>
@@ -22,12 +23,6 @@
 #include "config.h"
 #include "helpers.h"
 #include "packet.h"
-
-#ifdef __clang__
-#define MUSTTAIL __attribute__((musttail))
-#else
-#define MUSTTAIL
-#endif
 
 static struct { int n; char *i, *r; } flags = { 5, "static", "rendez.pub" };
 static braid_t b;
@@ -63,7 +58,8 @@ static void advertise(void) {
     if (++retries > ADVERTISE_RETRIES) braidexit(b);
     else {
       cksleep(b, ADVERTISE_RETRY_DELAY);
-      MUSTTAIL return advertise();
+      braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
+      return;
     }
   }
   retries = 0;
@@ -168,8 +164,8 @@ static void advertise(void) {
     chsend(b, ch2, (usize)c1);
   }
 
-done:;
-  MUSTTAIL return advertise();
+done:
+  braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
 }
 
 int advertise_main(int argc, char **argv) {

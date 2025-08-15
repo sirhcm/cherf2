@@ -6,7 +6,7 @@ include config.mk
 
 SRCS := $(wildcard *.c)
 OBJS := $(SRCS:.c=.o)
-CFLAGS := -Wall -Werror -std=c99 -g -O2 \
+CFLAGS := -Wall -Werror -std=c99 -g -O2 -static \
           $(MONOCYPHER_CFLAGS) $(BRAID_CFLAGS)
 LDFLAGS := $(MONOCYPHER_LDFLAGS) $(BRAID_LDFLAGS)
 
