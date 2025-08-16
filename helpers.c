@@ -152,8 +152,16 @@ void splice(braid_t b, char daemon, int from, int to, ch_t ch) {
   ssize_t n;
   cord_t c = (cord_t)chrecv(b, ch, 0);
   chclose(b, ch);
-  while ((n = fdread(b, from, buf, sizeof(buf))) > 0 || errno == EAGAIN)
-    if (fdwrite(b, to, buf, n) <= 0 && errno != EAGAIN) break;
+  while ((n = fdread(b, from, buf, sizeof(buf)))) {
+    ssize_t tot = 0;
+    if (n <= 0) break;
+    if (n == 0) { errno = ENODATA; break; }
+    while (tot < n) {
+      int rc = fdwrite(b, to, buf + tot, n - tot);
+      if (rc < 0) break;
+      tot += rc;
+    }
+  }
   if (daemon) syslog(LOG_NOTICE, "splice done: %m");
   else warn("splice done");
   close(from);

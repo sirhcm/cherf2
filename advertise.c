@@ -55,7 +55,7 @@ static void advertise(void) {
   gen_keys(s_sk, s_pk, r_pk, e_pk, es, ss);
   if ((fd = tcpdial(b, -1, r_host, atoi(r_port))) < 0) {
     syslog(LOG_ERR, "tcpdial failed: %m (retries: %d/%d)", retries, ADVERTISE_RETRIES);
-    if (++retries > ADVERTISE_RETRIES) braidexit(b);
+    if (++retries > ADVERTISE_RETRIES) return;
     else {
       cksleep(b, ADVERTISE_RETRY_DELAY);
       braidadd(b, advertise, 65536, "advertise", CORD_NORMAL, 0);
