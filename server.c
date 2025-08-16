@@ -159,7 +159,7 @@ static void handle(int fd) {
     // TODO: check advertiser public key
 
     syslog(LOG_INFO, "[%-15s] ADVERT: %s", ip, key2hex(keystr, data->hs.s));
-    c = chopen();
+    c = chopen(b);
 
     HASH_FIND(hh, map, data->hs.s, 32, t);
     if (t == NULL) {

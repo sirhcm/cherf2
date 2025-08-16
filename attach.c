@@ -83,7 +83,7 @@ static void attach(const uint8_t t_pk[static 32], uint16_t port) {
 
   {
     cord_t c1, c2;
-    ch_t ch1 = chopen(), ch2 = chopen();
+    ch_t ch1 = chopen(b), ch2 = chopen(b);
     c1 = braidadd(b, (void (*)())splice, 131072, "splice", CORD_NORMAL, 5, b, 0, fd, STDOUT_FILENO, ch1);
     c2 = braidadd(b, (void (*)())splice, 131072, "splice", CORD_NORMAL, 5, b, 0, STDIN_FILENO, fd, ch2);
     chsend(b, ch1, (usize)c2);

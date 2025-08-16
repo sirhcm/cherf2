@@ -156,7 +156,7 @@ static void advertise(void) {
 
   {
     cord_t c1, c2;
-    ch_t ch1 = chopen(), ch2 = chopen();
+    ch_t ch1 = chopen(b), ch2 = chopen(b);
     // TODO: should this be a separate process?
     c1 = braidadd(b, (void (*)())splice, 131072, "splice", CORD_NORMAL, 5, b, 1, fd, t, ch1);
     c2 = braidadd(b, (void (*)())splice, 131072, "splice", CORD_NORMAL, 5, b, 1, t, fd, ch2);
