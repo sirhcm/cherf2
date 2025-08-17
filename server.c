@@ -137,7 +137,6 @@ static void handle(int fd) {
     struct target *t;
     struct ad *a;
     ch_t c;
-    char ok;
     cord_t keepc;
     AdvertiseData *data = DATA(p, AdvertiseData);
     ConnectData *cd;
@@ -191,14 +190,14 @@ static void handle(int fd) {
     t->n++;
 
     keepc = braidadd(b, keepalive, 65536, "keepalive", CORD_NORMAL, 2, fd, c);
-    cd = (ConnectData *)chrecv(b, c, &ok);
+    cd = (ConnectData *)chrecv(b, c, 0);
 
     if (--t->n == 0) {
       HASH_DEL(map, t);
       free(t);
     }
 
-    if (!ok) {
+    if (!cd) {
       syslog(LOG_NOTICE, "[%-15s] connection timed out", ip);
       goto done;
     } else cordhalt(b, keepc);
