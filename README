@@ -13,7 +13,7 @@ DEPENDENCIES
   libraries are:
 
    - monocypher (https://monocypher.org/) for cryptography
-   - libbraid (https://github.com/christopherm99/libbraid) for cooperative
+   - libbraid (https://github.com/sirhcm/libbraid) for cooperative
      userspace multitasking.
 
 INSTALLATION
